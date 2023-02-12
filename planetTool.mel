@@ -1,0 +1,290 @@
+
+proc string createMaterialWithFileTexture(string $filePath, string $name)
+{
+    string $materialName = `shadingNode -asShader lambert -name $name`;
+    string $materialSG = `sets -renderable true -noSurfaceShader true -empty -name "materialSG"`;
+    connectAttr -f ( $materialName + ".outColor" ) ( $materialSG + ".surfaceShader" );
+    if($filePath != "")
+    {
+        string $fileName = `shadingNode -asTexture -isColorManaged file`;
+        string $place2dTexture = `shadingNode -asUtility place2dTexture`;
+        connectAttr -f ( $place2dTexture + ".coverage") ( $fileName + ".coverage");
+        connectAttr -f ( $place2dTexture + ".translateFrame") ( $fileName + ".translateFrame");
+        connectAttr -f ( $place2dTexture + ".rotateFrame") ( $fileName + ".rotateFrame");
+        connectAttr -f ( $place2dTexture + ".mirrorU") ( $fileName + ".mirrorU");
+        connectAttr -f ( $place2dTexture + ".mirrorV") ( $fileName + ".mirrorV");
+        connectAttr -f ( $place2dTexture + ".stagger") ( $fileName + ".stagger");
+        connectAttr -f ( $place2dTexture + ".wrapU") ( $fileName + ".wrapU");
+        connectAttr -f ( $place2dTexture + ".wrapV") ( $fileName + ".wrapV");
+        connectAttr -f ( $place2dTexture + ".repeatUV") ( $fileName + ".repeatUV");
+        connectAttr -f ( $place2dTexture + ".offset") ( $fileName + ".offset");
+        connectAttr -f ( $place2dTexture + ".rotateUV") ( $fileName + ".rotateUV");
+        connectAttr -f ( $place2dTexture + ".noiseUV") ( $fileName + ".noiseUV");
+        connectAttr -f ( $place2dTexture + ".vertexUvOne") ( $fileName + ".vertexUvOne");
+        connectAttr -f ( $place2dTexture + ".vertexUvTwo") ( $fileName + ".vertexUvTwo");
+        connectAttr -f ( $place2dTexture + ".vertexUvThree") ( $fileName + ".vertexUvThree");
+        connectAttr -f ( $place2dTexture + ".vertexCameraOne") ( $fileName + ".vertexCameraOne");
+        connectAttr -f ( $place2dTexture + ".outUV") ( $fileName + ".uv");
+        connectAttr -f ( $place2dTexture + ".outUvFilterSize") ( $fileName + ".uvFilterSize");
+        connectAttr -f ( $fileName + ".outColor") ($materialName+".color");
+        setAttr -type "string" ( $fileName + ".fileTextureName") $filePath;
+    }
+    return $materialName;
+}
+
+proc string createMoon(float $planetRad, float $moonRadSize, string $moonMaterialName) 
+{
+    $moonName = `polySphere -name moon -sx 30 -sy 30 -r $moonRadSize`;
+    move -r  0 $planetRad $planetRad ;
+    polySmooth -name $moonName;
+    select -r $moonName[0];
+    hyperShade -assign $moonMaterialName;
+    return $moonName[0];
+}
+
+proc string createRing(float $planetRad, string $ringMaterialName) 
+{
+    $torusRad = $planetRad * 2;
+    $torusInnerRad = $planetRad * 2 * 0.15;
+    $ringName = `polyTorus -name ring -r $torusRad -sr $torusInnerRad -tw 0 -sx 30 -sy 30 -ax 0 1 0 -cuv 1 -ch 1`;
+    scale -r 0.6 0.3 1 ;
+    $rotX = `rand -10 10`;
+    rotate -r -os -fo $rotX 0 0 ;
+    select -r $ringName[0];
+    hyperShade -assign $ringMaterialName;
+    return $ringName[0];
+}
+
+proc string createPlanet (float $rad, string $planetMaterials[])
+{
+    $planetName = `polySphere -name planet -sx 10 -sy 10 -r $rad`;
+    polySmooth -name $planetName;
+    select -r $planetName[0];
+    if(size($planetMaterials) > 0)
+    {
+        int $planetMateriaIdx = `rand 0 (size($planetMaterials))`;
+        hyperShade -assign $planetMaterials[$planetMateriaIdx];
+    }
+    
+    return  $planetName[0];
+}
+
+proc string combineElements (string $planetsElements[]) 
+{
+    select -r $planetsElements[0];
+    for($i=1; $i<size($planetsElements); ++$i)
+    {  
+        select -tgl $planetsElements[$i];
+    }
+    $planetCombineName = `polyUnite -ch 1 -mergeUVSets 1 -centerPivot -name planet`;
+
+
+    for($i=0; $i<size($planetsElements); ++$i)
+    {  
+        parent $planetsElements[$i] $planetCombineName[0];
+    }
+    return $planetCombineName[0];
+}
+
+proc string createPlanetAndElements (float $rad, int $withRing, int $withMoon, string $planetMaterials[], string $ringMaterials[], string $moonMaterials[]) 
+{
+    string $planetName = createPlanet ($rad, $planetMaterials);
+    string $planetsElements[] = { $planetName };
+    string $returnName = $planetName;
+    
+    if ($withRing=="1")
+    {
+        int $ringMateriaIdx = `rand 0 (size($ringMaterials))`;
+        $ringName = createRing($rad, $ringMaterials[$ringMateriaIdx]);
+        stringArrayInsertAtIndex(size($planetsElements), $planetsElements, $ringName );
+    }
+
+    if ($withMoon=="1")
+    {
+        float $moonRad = $rad * 0.2;
+        int $moonMaterialIdx = `rand 0 (size($moonMaterials))`;
+        $moonName = createMoon($rad, $moonRad, $moonMaterials[$moonMaterialIdx]);
+        stringArrayInsertAtIndex(size($planetsElements), $planetsElements, $moonName );
+    }
+
+    if (size($planetsElements) > 1) 
+    {
+        $returnName = combineElements($planetsElements);
+    }
+    return $returnName;
+}
+
+proc string[] createMaterialList(string $columName, string $filePathName, string $materialName) 
+{
+    int $numFilePaths = `columnLayout -q -nch $columName`;
+    string $materials[];
+    int $m;
+    for($m=1; $m<$numFilePaths; ++$m) 
+    {
+        if(`textFieldButtonGrp -exists ($filePathName+$m)`)
+        {
+            string $filePath = `textFieldButtonGrp -q -tx ($filePathName+$m)`;
+            if($filePath != "") 
+            {
+                string $material = createMaterialWithFileTexture($filePath, $materialName);
+                stringArrayInsertAtIndex(size($materials), $materials, $material );
+            }
+        }
+    }
+    return  $materials;
+}
+
+proc createPlanetsCallback()
+{
+
+    int $numPlanets = `intSliderGrp -q -v numberOfPlanets`;
+    float $minRadius = `floatSliderGrp -q -v minRadius`;
+    float $maxRadius = `floatSliderGrp -q -v maxRadius`;
+    string $planetMaterials[] = createMaterialList("secondColumnPlanets", "planetFilePath", "planetMaterial");
+    
+    int $withRing = `checkBox -q -v checkBoxRing`;
+    string $ringMaterials[];
+    if ($withRing == 1) 
+    {
+        $ringMaterials = createMaterialList("secondColumnRings", "ringFilePath", "ringMaterial");
+    }
+    
+    int $withMoon = `checkBox -q -v checkBoxMoon`;
+    string $moonMaterials[];
+    if ($withMoon == 1) 
+    {
+        $moonMaterials = createMaterialList("secondColumnMoons", "moonFilePath", "moonMaterial");
+    }
+    
+    int $minScaterX = `floatSliderGrp -q -v minTranslateX`;
+    int $maxScaterX = `floatSliderGrp -q -v maxTranslateX`;
+
+    int $minScaterY = `floatSliderGrp -q -v minTranslateY`;
+    int $maxScaterY = `floatSliderGrp -q -v maxTranslateY`;
+
+    int $minScaterZ = `floatSliderGrp -q -v minTranslateZ`;
+    int $maxScaterZ = `floatSliderGrp -q -v maxTranslateZ`;
+    
+    int $i;
+    for($i=0; $i<$numPlanets; ++$i)
+    {   
+        $radius = `rand $minRadius $maxRadius`;
+        $planetName = createPlanetAndElements($radius, $withRing, $withMoon, $planetMaterials, $ringMaterials, $moonMaterials);
+        
+        select -r $planetName;
+        CenterPivot;
+        
+        $rotX = `rand -10 10`;
+        $rotY = `rand 0 360`;
+        $rotZ = `rand -10 10`;
+        rotate -r -os -fo $rotX $rotY $rotZ;
+        
+        select -r $planetName;
+        CenterPivot;
+
+        $x = `rand $minScaterX $maxScaterX`;
+        $y = `rand $minScaterY $maxScaterY`;
+        $z = `rand $minScaterZ $maxScaterZ`;
+        move $x $y $z $planetName ;
+    }
+}
+
+proc browseCallback(string $filePathField) 
+{
+    string $filename[] = `fileDialog2 -fileMode 1 -caption "Import Image"`;
+    textFieldButtonGrp -edit -fileName $filename[0] $filePathField;
+}
+
+proc buttonAndTxtFilePathEnable(string $filePathType, string $buttonType, string $columName)
+{  
+    int $onOffFlag = 0;
+    if(`button -q -enable $buttonType`)
+    {
+        $onOffFlag = 0;
+    }
+    else
+    {
+        $onOffFlag = 1;
+    }
+    button -edit -en $onOffFlag $buttonType;
+    int $numFilePaths = `columnLayout -q -nch $columName`;
+    int $p;
+    for($p=1; $p<$numFilePaths; ++$p) 
+    {
+        textFieldButtonGrp -edit -enable $onOffFlag ($filePathType+$p);
+    }
+}
+
+proc addFilePath(string $columnName, string $rowName, string $textLabel, string $filePath) 
+{
+   int $numFilePaths = `columnLayout -q -nch $columnName`;
+   string $rowFilePathName = $rowName+$numFilePaths;
+   rowLayout -p $columnName -numberOfColumns 2 $rowFilePathName;
+   $name = ($filePath+$numFilePaths);
+   $callback = ("browseCallback(\""+$name+"\");");
+   $filePath = `textFieldButtonGrp -parent $rowFilePathName -label ($textLabel+" "+$numFilePaths) -buttonLabel "Browse" -bc $callback $name`;
+}
+
+proc createPlanetsGUI()
+{
+    if(`window -exists PlanetsWindow`)
+    {
+        deleteUI PlanetsWindow;
+    }
+    window -t "Planets Tool" PlanetsWindow;
+    
+    columnLayout colLayout;
+    frameLayout -labelVisible false -marginWidth 5 -marginHeight 5;
+    columnLayout -p colLayout colLayoutPlanets;
+    text -fn "boldLabelFont" -label "Create Planets";
+
+    intSliderGrp  -field 1 -l "Number of Planets" -min 1 -max 50 -value 10 numberOfPlanets;
+    int $numOfPlanets =  `intSliderGrp -q -v numberOfPlanets`;
+    floatSliderGrp -field 1 -l "Min Planet Radius" -min 1 -max 5 -value 1 minRadius;
+    floatSliderGrp -field 1 -l "Max Planet Radius" -min 1 -max 10 -value 3 maxRadius;
+    
+    columnLayout -adj 1 firstColumnPlanets;
+    columnLayout -adj 1 secondColumnPlanets;
+    
+    button -l "Add planet textures" -command "addFilePath(\"secondColumnPlanets\", \"planetRow\", \"Planet Texture Image\", \"planetFilePath\");" planetTextButton;
+    setParent..;
+    setParent..;
+    
+    checkBox -l "With Ring" -changeCommand "buttonAndTxtFilePathEnable(\"ringFilePath\",\"ringTextButton\", \"secondColumnRings\");" checkBoxRing;
+    columnLayout -adj 1 firstColumnRings;
+    columnLayout -adj 1 secondColumnRings;
+    
+    button -l "Add ring textures" -en false -command "addFilePath(\"secondColumnRings\",\"ringRow\",\"Ring Texture Image\", \"ringFilePath\");" ringTextButton;
+    setParent..;
+    setParent..;
+    
+
+    checkBox -l "With Moon" -changeCommand "buttonAndTxtFilePathEnable(\"moonFilePath\", \"moonTextButton\", \"secondColumnMoons\");" checkBoxMoon;
+    columnLayout -adj 1 firstColumnMoons;
+    columnLayout -adj 1 secondColumnMoons;
+    button -l "Add moon textures" -en false -command "addFilePath(\"secondColumnMoons\",\"moonRow\",\"Moon Texture Image\", \"moonFilePath\");" moonTextButton;
+    setParent..;
+        
+    frameLayout -labelVisible false -marginWidth 0 -marginHeight 5;
+    columnLayout -p colLayoutPlanets colLayoutScaterArea;
+    
+    text -label "Scater Area:";
+    frameLayout -labelVisible false -marginWidth 5 -marginHeight 5;
+    rowLayout -p colLayoutPlanets -numberOfColumns 2 rowAreaX;
+    floatSliderGrp -p rowAreaX -field 1 -l "Min X" -minValue -70 -maxValue 70 -value -10 minTranslateX;
+    floatSliderGrp -p rowAreaX -field 1 -l "Max X" -minValue -70 -maxValue 70 -value 10 maxTranslateX;
+    rowLayout -p colLayoutScaterArea -numberOfColumns 2 rowAreaY;
+    floatSliderGrp -p rowAreaY -field 1 -l "Min Y" -minValue -70 -maxValue 70 -value -10 minTranslateY;
+    floatSliderGrp -p rowAreaY -field 1 -l "Max Y" -minValue -70 -maxValue 70 -value 10 maxTranslateY;
+    rowLayout -p colLayoutScaterArea -numberOfColumns 2 rowAreaZ;
+    floatSliderGrp -p rowAreaZ -field 1 -l "Min Z" -minValue -70 -maxValue 70 -value -10 minTranslateZ;
+    floatSliderGrp -p rowAreaZ -field 1 -l "Max Z" -minValue -70 -maxValue 70 -value 10 maxTranslateZ;
+
+    setParent colLayout;
+    frameLayout -labelVisible false -marginWidth 5 -marginHeight 5;
+    button -l "Create" -command "createPlanetsCallback();";
+    
+    showWindow PlanetsWindow;
+}
+
+createPlanetsGUI();
