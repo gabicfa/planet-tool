@@ -3,7 +3,7 @@
 This MEL script creates a GUI that makes it possible to create planets and scatter them in a desired region. This tool allows you to create simple planets and gives you the option to add a ring around it and/or a moon. You can also apply different textures to this elements.
 
 ![interface](/img/interface.png)
-![planets](/ing/planets.png)
+![planets](/img/planets.png)
 
 To use the Planet Tool MEL script in Maya, you can follow these steps:
 
