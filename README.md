@@ -1,6 +1,6 @@
 # Planet Tool
 
-This MEL script creates a GUI that makes it possible to create planets and scatter them in a desired region. This tool allows you to create simple planets and gives you the option to add a ring around it and/or a moon. You can also apply different textures to this elements.
+This MEL script creates a GUI that makes it possible to create planets and scatter them in a desired region. This tool allows you to create simple planets and gives you the option to add a ring around it and/or a moon. You can also apply different textures to these elements.
 
 ![interface](/img/interface.png)
 ![planets](/img/planets.png)
